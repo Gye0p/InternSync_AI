@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Login to INTERNSYNC AI — AI-Powered Internship Management">
+    <title>Login — INTERNSYNC AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/styles/app.css">
+</head>
+<body>
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <div class="auth-logo">🔗</div>
+            <h1 class="auth-title">INTERNSYNC AI</h1>
+            <p class="auth-subtitle">AI-Powered Internship Management</p>
+        </div>
+
+        <div id="error-msg" class="alert alert-danger" style="display:none"></div>
+
+        <form id="login-form" class="auth-form" novalidate>
+            <div class="form-group">
+                <label class="form-label" for="login-email">Email Address <span class="required">*</span></label>
+                <input id="login-email" type="email" class="form-control" placeholder="you@example.com" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="login-password">Password <span class="required">*</span></label>
+                <input id="login-password" type="password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <button type="submit" id="login-btn" class="btn btn-primary btn-full btn-lg" style="margin-top:8px;">
+                <span id="btn-text">Sign In</span>
+                <span id="btn-spinner" class="spinner" style="display:none"></span>
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            Don't have an account? <a href="/register">Create one</a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // If already logged in, redirect
+    const jwt = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('jwt_token='))?.split('=')[1];
+    if (jwt) {
+        try {
+            const payload = JSON.parse(atob(jwt.split('.')[1]));
+            const role = extractRole(payload);
+            redirectByRole(role);
+            return;
+        } catch(e) {}
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value.trim();
+        const password = document.getElementById('login-password').value;
+        const errorEl = document.getElementById('error-msg');
+        const btnText = document.getElementById('btn-text');
+        const spinner = document.getElementById('btn-spinner');
+        const btn = document.getElementById('login-btn');
+
+        errorEl.style.display = 'none';
+        btn.disabled = true;
+        btnText.textContent = 'Signing in…';
+        spinner.style.display = 'inline-block';
+
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const contentType = res.headers.get('content-type') || '';
+            const raw = await res.text();
+            const data = contentType.includes('application/json') ? JSON.parse(raw) : { error: raw };
+
+            if (!res.ok) {
+                throw new Error(data.message || data.error || 'Invalid credentials');
+            }
+
+            // Store JWT as cookie (1h expiry)
+            const expires = new Date(Date.now() + 3600000).toUTCString();
+            document.cookie = `jwt_token=${data.token}; expires=${expires}; path=/; SameSite=Lax`;
+
+            // Decode role and redirect
+            const payload = JSON.parse(atob(data.token.split('.')[1]));
+            redirectByRole(extractRole(payload));
+
+        } catch (err) {
+            errorEl.textContent = err.message || 'Login failed. Please try again.';
+            errorEl.style.display = 'flex';
+        } finally {
+            btn.disabled = false;
+            btnText.textContent = 'Sign In';
+            spinner.style.display = 'none';
+        }
+    });
+
+    function redirectByRole(role) {
+        switch(role.toUpperCase()) {
+            case 'STUDENT':     window.location.href = '/student/dashboard';     break;
+            case 'SUPERVISOR':  window.location.href = '/supervisor/dashboard';  break;
+            case 'COORDINATOR': window.location.href = '/coordinator/dashboard'; break;
+            default:            window.location.href = '/student/dashboard';
+        }
+    }
+
+    function extractRole(payload) {
+        if (payload.role) {
+            return String(payload.role).replace(/^ROLE_/, '');
+        }
+
+        if (Array.isArray(payload.roles) && payload.roles.length > 0) {
+            return String(payload.roles[0]).replace(/^ROLE_/, '');
+        }
+
+        return '';
+    }
+});
+</script>
+</body>
+</html>

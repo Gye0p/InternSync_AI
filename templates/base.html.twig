@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="INTERNSYNC AI — AI-Powered Internship Management System">
+    <title>{% block title %}INTERNSYNC AI{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    {% block stylesheets %}
+        {{ encore_entry_link_tags('app') is defined ? encore_entry_link_tags('app') : '' }}
+        <link rel="stylesheet" href="/assets/styles/app.css">
+    {% endblock %}
+</head>
+<body>
+<div class="app-layout" data-controller="sidebar theme">
+
+    {# ── Sidebar ── #}
+    <aside class="sidebar" id="sidebar" data-sidebar-target="sidebar">
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-icon"><i class="fa-solid fa-link" aria-hidden="true"></i></div>
+            <div class="sidebar-brand-text">
+                <span class="sidebar-brand-name">INTERNSYNC AI</span>
+                <span class="sidebar-brand-tagline">AI-Powered OJT Platform</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav">
+            {% set role = app_user.role|default('STUDENT') %}
+
+            {% if role == 'STUDENT' %}
+                <span class="nav-section-label">Student</span>
+                <a href="/student/dashboard" class="nav-link {% if app.request.pathinfo starts with '/student/dashboard' %}active{% endif %}">
+                    <span class="nav-icon"><i class="fa-solid fa-house" aria-hidden="true"></i></span> Dashboard
+                </a>
+                <a href="/student/logs" class="nav-link {% if app.request.pathinfo starts with '/student/logs' %}active{% endif %}">
+                    <span class="nav-icon"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></span> My Logs
+                </a>
+
+            {% elseif role == 'SUPERVISOR' %}
+                <span class="nav-section-label">Supervisor</span>
+                <a href="/supervisor/dashboard" class="nav-link {% if app.request.pathinfo starts with '/supervisor/dashboard' %}active{% endif %}">
+                    <span class="nav-icon"><i class="fa-solid fa-house" aria-hidden="true"></i></span> Dashboard
+                </a>
+                <a href="/supervisor/approvals" class="nav-link {% if app.request.pathinfo starts with '/supervisor/approvals' %}active{% endif %}">
+                    <span class="nav-icon"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span> Approval Queue
+                </a>
+
+            {% elseif role == 'COORDINATOR' %}
+                <span class="nav-section-label">Coordinator</span>
+                <a href="/coordinator/dashboard" class="nav-link {% if app.request.pathinfo starts with '/coordinator/dashboard' %}active{% endif %}">
+                    <span class="nav-icon"><i class="fa-solid fa-chart-column" aria-hidden="true"></i></span> Dashboard
+                </a>
+            {% endif %}
+
+            <span class="nav-section-label" style="margin-top:12px;">Settings</span>
+            <a href="#" class="nav-link" id="theme-toggle" data-action="click->theme#toggle">
+                <span class="nav-icon"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i></span> Toggle Theme
+            </a>
+        </nav>
+
+        <div class="sidebar-user">
+            <div class="sidebar-user-card">
+                <div class="user-avatar">{{ app_user.name|slice(0,1)|upper|default('U') }}</div>
+                <div class="user-info">
+                    <div class="user-name">{{ app_user.name|default('User') }}</div>
+                    <div class="user-role">{{ app_user.role|lower|default('guest') }}</div>
+                </div>
+                <button class="btn-logout" onclick="logout()" title="Logout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></button>
+            </div>
+        </div>
+    </aside>
+
+    {# Overlay for mobile #}
+    <div class="sidebar-overlay" id="sidebar-overlay" data-sidebar-target="overlay" data-action="click->sidebar#close"></div>
+
+    {# ── Main Content ── #}
+    <main class="main-content">
+        <header class="page-header">
+            <div class="flex items-center gap-3">
+                <button class="hamburger" data-action="click->sidebar#toggle" aria-label="Menu"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+                <div>
+                    <div class="page-title">{% block page_title %}INTERNSYNC AI{% endblock %}</div>
+                    <div class="page-subtitle">{% block page_subtitle %}{% endblock %}</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                {% block header_actions %}{% endblock %}
+            </div>
+        </header>
+
+        <div class="page-content">
+            {# Flash messages #}
+            {% for type, messages in app.flashes %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ type == 'error' ? 'danger' : type }}">
+                        <span>
+                            {% if type == 'success' %}
+                                <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                            {% elseif type == 'error' %}
+                                <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>
+                            {% else %}
+                                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                            {% endif %}
+                        </span>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endfor %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+</div>
+
+{% block javascripts %}
+<script>
+function logout() {
+    document.cookie = 'jwt_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    window.location.href = '/login';
+}
+function getJwt() {
+    return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('jwt_token='))?.split('=')[1] || '';
+}
+window.getJwt = getJwt;
+</script>
+{% endblock %}
+
+<script>
+// Sidebar controller inline (Stimulus-compatible)
+document.addEventListener('DOMContentLoaded', () => {
+    // Theme
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    const themeBtn = document.getElementById('theme-toggle');
+    if (themeBtn) {
+        themeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+        });
+    }
+
+    // Sidebar mobile
+    const hamburger = document.querySelector('.hamburger');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (hamburger && sidebar && overlay) {
+        hamburger.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('open');
+        });
+        overlay.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+        });
+    }
+});
+</script>
+</body>
+</html>

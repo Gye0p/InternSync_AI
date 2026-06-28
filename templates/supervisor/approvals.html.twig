@@ -1,0 +1,231 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Approval Queue — INTERNSYNC AI{% endblock %}
+{% block page_title %}Approval Queue{% endblock %}
+{% block page_subtitle %}Review and respond to student logs{% endblock %}
+
+{% block content %}
+<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
+    <div class="stat-card">
+        <span class="stat-icon">⏳</span>
+        <div class="stat-value" id="stat-pending">—</div>
+        <div class="stat-label">Pending Review</div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon">✅</span>
+        <div class="stat-value" id="stat-approved">—</div>
+        <div class="stat-label">Approved</div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon">❌</span>
+        <div class="stat-value" id="stat-rejected">—</div>
+        <div class="stat-label">Rejected</div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon">👥</span>
+        <div class="stat-value" id="stat-students">—</div>
+        <div class="stat-label">Students</div>
+    </div>
+</div>
+
+<div class="flex gap-3 mb-3" style="align-items:center; flex-wrap:wrap;">
+    <div class="card-title">Student Logs</div>
+    <div class="flex gap-2" style="margin-left:auto;">
+        <input type="text" id="search-input" class="form-control"
+            placeholder="Search…" style="width:200px; padding:7px 12px; font-size:13px;">
+        <select id="status-filter" class="form-control" style="width:140px; padding:7px 12px; font-size:13px;">
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="">All</option>
+        </select>
+    </div>
+</div>
+
+<div id="log-list">
+    <div class="empty-state" style="padding:64px;">
+        <div class="spinner spinner-lg"></div>
+        <p style="margin-top:16px;color:var(--text-muted)">Loading logs…</p>
+    </div>
+</div>
+
+{# Reject Modal #}
+<div class="modal-overlay" id="reject-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">❌ Reject Log</div>
+            <button class="modal-close" onclick="closeRejectModal()">×</button>
+        </div>
+        <p class="text-muted text-sm mb-2">Please provide feedback so the student can improve their next submission.</p>
+        <div class="form-group">
+            <label class="form-label" for="reject-comment">Your Comment <span class="required">*</span></label>
+            <textarea id="reject-comment" class="form-control" rows="4"
+                placeholder="E.g., Please elaborate on the tasks performed. The entry is too brief…"></textarea>
+        </div>
+        <div class="flex gap-2" style="justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeRejectModal()">Cancel</button>
+            <button class="btn btn-danger" id="confirm-reject-btn" onclick="submitReject()">
+                Reject Log
+            </button>
+        </div>
+        <input type="hidden" id="reject-log-id">
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+{{ parent() }}
+<script>
+let allLogs = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const jwt = window.getJwt();
+    if (!jwt) { window.location.href = '/login'; return; }
+    await loadLogs(jwt);
+    document.getElementById('search-input').addEventListener('input', filterLogs);
+    document.getElementById('status-filter').addEventListener('change', filterLogs);
+});
+
+async function loadLogs(jwt) {
+    try {
+        const res = await fetch('/api/logs', { headers: { 'Authorization': 'Bearer ' + (jwt || window.getJwt()) } });
+        allLogs = await res.json();
+
+        // Stats
+        document.getElementById('stat-pending').textContent  = allLogs.filter(l=>l.status==='PENDING').length;
+        document.getElementById('stat-approved').textContent = allLogs.filter(l=>l.status==='APPROVED').length;
+        document.getElementById('stat-rejected').textContent = allLogs.filter(l=>l.status==='REJECTED').length;
+        const uniqueStudents = new Set(allLogs.map(l=>l.studentId||l.studentName)).size;
+        document.getElementById('stat-students').textContent = uniqueStudents;
+
+        filterLogs();
+    } catch(e) {
+        document.getElementById('log-list').innerHTML = '<div class="alert alert-danger">Failed to load logs.</div>';
+    }
+}
+
+function filterLogs() {
+    const q      = document.getElementById('search-input').value.toLowerCase();
+    const status = document.getElementById('status-filter').value;
+    const filtered = allLogs.filter(l =>
+        (!status || l.status === status) &&
+        (!q || (l.content||'').toLowerCase().includes(q) ||
+               (l.studentName||'').toLowerCase().includes(q) ||
+               (l.date||'').includes(q))
+    );
+    renderLogs(filtered);
+}
+
+function renderLogs(logs) {
+    const container = document.getElementById('log-list');
+    if (!logs.length) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding:64px;">
+                <div class="empty-state-icon">✅</div>
+                <div class="empty-state-title">All Clear!</div>
+                <div class="empty-state-desc">No logs matching the current filter.</div>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = logs.map((log, i) => {
+        const fb = log.aiFeedback;
+        const tags = (fb?.skill_tags || log.skillTags || []).map(t => `<span class="skill-tag">${escHtml(t)}</span>`).join('');
+        const isPending = log.status === 'PENDING';
+
+        return `
+        <div class="card animate-slide-up" style="margin-bottom:16px; animation-delay:${i*0.04}s;">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex gap-3 items-center">
+                    <div class="user-avatar" style="width:36px;height:36px;font-size:14px;">${(log.studentName||'S').charAt(0)}</div>
+                    <div>
+                        <div class="font-semibold" style="font-size:14px;">${escHtml(log.studentName || 'Student')}</div>
+                        <div class="text-xs text-muted">${log.date || ''} · ${log.hoursWorked || 8}h worked</div>
+                    </div>
+                </div>
+                <div class="flex gap-2 items-center">
+                    <span class="badge badge-${(log.status||'pending').toLowerCase()}">${log.status||'PENDING'}</span>
+                    ${isPending ? `
+                    <button class="btn btn-success btn-sm" onclick="approveLog(${log.id})">✓ Approve</button>
+                    <button class="btn btn-danger  btn-sm" onclick="showRejectModal(${log.id})">✗ Reject</button>
+                    ` : ''}
+                </div>
+            </div>
+
+            <div style="background:var(--bg-input); padding:14px; border-radius:var(--radius-sm); font-size:14px; line-height:1.6; color:var(--text-secondary); margin-bottom:${fb?'12px':'0'};">
+                ${escHtml(log.content || '')}
+            </div>
+
+            ${fb ? `
+            <div class="ai-feedback-box">
+                <div class="ai-feedback-header"><span class="ai-icon">🤖</span>AI Review</div>
+                ${fb.grammar_suggestions ? `<div class="ai-feedback-grammar">${escHtml(fb.grammar_suggestions)}</div>` : '<div class="ai-feedback-grammar" style="color:var(--success)">✓ No grammar issues detected.</div>'}
+                ${tags ? `<div class="skill-tags" style="margin-top:10px;">${tags}</div>` : ''}
+                ${fb.clarity_score ? `<div class="clarity-stars" style="margin-top:8px;">
+                    ${Array.from({length:5},(_,i)=>`<span class="star ${i<fb.clarity_score?'filled':''}">${i<fb.clarity_score?'★':'☆'}</span>`).join('')}
+                    <span class="text-sm text-muted" style="margin-left:8px;">${fb.clarity_score}/5</span>
+                </div>` : ''}
+            </div>` : ''}
+
+            ${log.supervisorComment ? `
+            <div style="margin-top:12px; padding:10px 12px; background:var(--danger-bg); border-left:3px solid var(--danger); border-radius:var(--radius-sm); font-size:13px;">
+                <strong style="color:var(--danger)">Your comment:</strong>
+                <span style="color:var(--text-secondary); margin-left:6px;">${escHtml(log.supervisorComment)}</span>
+            </div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+async function approveLog(id) {
+    const jwt = window.getJwt();
+    try {
+        const res = await fetch(`/api/logs/${id}/approve`, {
+            method: 'PATCH',
+            headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' }
+        });
+        if (res.ok) { await loadLogs(jwt); }
+        else { alert('Failed to approve log.'); }
+    } catch(e) { alert('Network error.'); }
+}
+
+function showRejectModal(id) {
+    document.getElementById('reject-log-id').value = id;
+    document.getElementById('reject-comment').value = '';
+    document.getElementById('reject-modal').classList.add('open');
+}
+
+function closeRejectModal() {
+    document.getElementById('reject-modal').classList.remove('open');
+}
+
+async function submitReject() {
+    const id      = document.getElementById('reject-log-id').value;
+    const comment = document.getElementById('reject-comment').value.trim();
+    const jwt     = window.getJwt();
+
+    if (!comment) {
+        document.getElementById('reject-comment').style.borderColor = 'var(--danger)';
+        return;
+    }
+
+    const btn = document.getElementById('confirm-reject-btn');
+    btn.disabled = true;
+    btn.textContent = 'Rejecting…';
+
+    try {
+        const res = await fetch(`/api/logs/${id}/reject`, {
+            method: 'PATCH',
+            headers: { 'Authorization': 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ comment })
+        });
+        if (res.ok) { closeRejectModal(); await loadLogs(jwt); }
+        else { alert('Failed to reject log.'); }
+    } catch(e) { alert('Network error.'); }
+    finally { btn.disabled = false; btn.textContent = 'Reject Log'; }
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}

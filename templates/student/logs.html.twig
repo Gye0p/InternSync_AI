@@ -1,0 +1,271 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}My Logs — INTERNSYNC AI{% endblock %}
+{% block page_title %}Daily Logs{% endblock %}
+{% block page_subtitle %}Submit and track your OJT progress{% endblock %}
+
+{% block content %}
+<div style="display:grid; grid-template-columns:420px 1fr; gap:28px; align-items:start;" id="logs-grid">
+
+    {# ── Log Submission Form ── #}
+    <div class="card" style="position:sticky; top:80px;">
+        <div class="card-header">
+            <div>
+                <div class="card-title">📝 Submit Log</div>
+                <div class="card-subtitle">Daily OJT activity entry</div>
+            </div>
+        </div>
+
+        <div id="form-success" class="alert alert-success" style="display:none">
+            ✓ Log submitted! AI is reviewing your entry…
+        </div>
+        <div id="form-error" class="alert alert-danger" style="display:none"></div>
+
+        <form id="log-form" novalidate>
+            <div class="form-group">
+                <label class="form-label" for="log-date">Date <span class="required">*</span></label>
+                <input id="log-date" type="date" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="log-hours">Hours Worked</label>
+                <input id="log-hours" type="number" class="form-control" value="8" min="0.5" max="24" step="0.5">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="log-content">What did you do today? <span class="required">*</span></label>
+                <textarea id="log-content" class="form-control" rows="6" placeholder="Describe your activities in detail. What tasks did you accomplish? What did you learn? What challenges did you face?..." required></textarea>
+                <div class="form-hint">Tip: The more detail you provide, the better AI feedback you'll receive.</div>
+            </div>
+            <button type="submit" id="log-submit-btn" class="btn btn-primary btn-full">
+                <span id="submit-text">🚀 Submit Log</span>
+                <span id="submit-spinner" class="spinner" style="display:none"></span>
+            </button>
+        </form>
+
+        {# AI Feedback Section #}
+        <div id="ai-feedback-section" style="display:none; margin-top:20px;">
+            <div class="ai-feedback-box">
+                <div class="ai-feedback-header">
+                    <span class="ai-icon">🤖</span>
+                    AI Feedback
+                </div>
+                <div id="ai-grammar" class="ai-feedback-grammar"></div>
+                <div style="margin-top:12px;">
+                    <div class="text-xs text-muted mb-1">SKILL TAGS DETECTED</div>
+                    <div id="ai-tags" class="skill-tags"></div>
+                </div>
+                <div style="margin-top:12px;">
+                    <div class="text-xs text-muted mb-1">CLARITY SCORE</div>
+                    <div id="ai-stars" class="clarity-stars"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Log History ── #}
+    <div>
+        <div class="flex justify-between items-center mb-3">
+            <div class="card-title">Log History</div>
+            <div class="flex gap-2">
+                <input type="text" id="log-search" class="form-control form-control-sm"
+                    placeholder="Search logs…"
+                    style="width:200px; padding:7px 12px; font-size:13px;">
+                <select id="log-filter" class="form-control" style="width:130px; padding:7px 12px; font-size:13px;">
+                    <option value="">All Status</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="REJECTED">Rejected</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="log-list">
+            <div class="empty-state" style="padding:48px;">
+                <div class="spinner spinner-lg"></div>
+                <p style="margin-top:16px; color:var(--text-muted)">Loading your logs…</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+{{ parent() }}
+<script>
+let allLogs = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const jwt = window.getJwt();
+    if (!jwt) { window.location.href = '/login'; return; }
+
+    // Set today's date
+    document.getElementById('log-date').value = new Date().toISOString().split('T')[0];
+
+    // Load logs
+    await loadLogs(jwt);
+
+    // Form submit
+    document.getElementById('log-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const date    = document.getElementById('log-date').value;
+        const hours   = parseFloat(document.getElementById('log-hours').value) || 8;
+        const content = document.getElementById('log-content').value.trim();
+        const errEl   = document.getElementById('form-error');
+        const sucEl   = document.getElementById('form-success');
+        const btn     = document.getElementById('log-submit-btn');
+        const text    = document.getElementById('submit-text');
+        const spinner = document.getElementById('submit-spinner');
+
+        errEl.style.display = 'none';
+        sucEl.style.display = 'none';
+
+        if (!content || content.length < 10) {
+            errEl.textContent = 'Please write at least 10 characters describing your activities.';
+            errEl.style.display = 'flex';
+            return;
+        }
+
+        btn.disabled = true;
+        text.textContent = 'Submitting…';
+        spinner.style.display = 'inline-block';
+
+        try {
+            const res = await fetch('/api/logs', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + jwt,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ date, content, hoursWorked: hours })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Submission failed');
+
+            sucEl.style.display = 'flex';
+            document.getElementById('log-content').value = '';
+
+            // Show AI feedback if present
+            if (data.aiFeedback) {
+                showAiFeedback(data.aiFeedback);
+            }
+
+            await loadLogs(jwt);
+
+        } catch(err) {
+            errEl.textContent = err.message;
+            errEl.style.display = 'flex';
+        } finally {
+            btn.disabled = false;
+            text.textContent = '🚀 Submit Log';
+            spinner.style.display = 'none';
+        }
+    });
+
+    // Search/filter
+    document.getElementById('log-search').addEventListener('input', filterLogs);
+    document.getElementById('log-filter').addEventListener('change', filterLogs);
+});
+
+async function loadLogs(jwt) {
+    try {
+        const res = await fetch('/api/logs', { headers: { 'Authorization': 'Bearer ' + jwt } });
+        allLogs = await res.json();
+        renderLogs(allLogs);
+    } catch(e) {
+        document.getElementById('log-list').innerHTML = '<div class="alert alert-danger">Failed to load logs.</div>';
+    }
+}
+
+function filterLogs() {
+    const q      = document.getElementById('log-search').value.toLowerCase();
+    const status = document.getElementById('log-filter').value;
+    const filtered = allLogs.filter(l =>
+        (!status || l.status === status) &&
+        (!q || (l.content||'').toLowerCase().includes(q) || (l.date||'').includes(q))
+    );
+    renderLogs(filtered);
+}
+
+function renderLogs(logs) {
+    const container = document.getElementById('log-list');
+    if (!logs.length) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding:64px;">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-title">No Logs Found</div>
+                <div class="empty-state-desc">Submit your first daily log using the form on the left.</div>
+            </div>`;
+        return;
+    }
+    container.innerHTML = logs.map((log, i) => {
+        const fb = log.aiFeedback;
+        const stars = fb?.clarity_score
+            ? '★'.repeat(fb.clarity_score) + '☆'.repeat(5 - fb.clarity_score)
+            : '';
+        const tags = (fb?.skill_tags || log.skillTags || [])
+            .map(t => `<span class="skill-tag">${escHtml(t)}</span>`).join('');
+
+        return `
+        <div class="log-card animate-slide-up" style="animation-delay:${i*0.05}s" onclick="toggleLog(this)">
+            <div class="log-card-header">
+                <div>
+                    <div class="font-semibold" style="font-size:14px;">${log.date || ''}</div>
+                    <div class="text-xs text-muted">${log.hoursWorked || 8}h worked</div>
+                </div>
+                <span class="badge badge-${(log.status||'pending').toLowerCase()}">${log.status || 'PENDING'}</span>
+            </div>
+            <div class="log-preview" style="color:var(--text-secondary); font-size:14px; line-height:1.5; margin-bottom:${fb ? 12 : 0}px;">
+                ${escHtml(log.content || '')}
+            </div>
+            ${log.supervisorComment ? `
+            <div style="margin-top:12px; padding:10px 12px; background:var(--danger-bg); border-left:3px solid var(--danger); border-radius:var(--radius-sm); font-size:13px;">
+                <strong style="color:var(--danger)">Supervisor feedback:</strong>
+                <span style="color:var(--text-secondary); margin-left:6px;">${escHtml(log.supervisorComment)}</span>
+            </div>` : ''}
+            ${fb ? `
+            <div class="ai-feedback-box" style="margin-top:12px;">
+                <div class="ai-feedback-header"><span class="ai-icon">🤖</span>AI Review</div>
+                ${fb.grammar_suggestions ? `<div class="ai-feedback-grammar">${escHtml(fb.grammar_suggestions)}</div>` : ''}
+                ${tags ? `<div class="skill-tags" style="margin-top:10px;">${tags}</div>` : ''}
+                ${stars ? `<div class="clarity-stars" style="margin-top:8px;" title="Clarity score: ${fb.clarity_score}/5">
+                    <span style="font-size:13px; color:var(--text-muted); margin-right:4px;">Clarity:</span>
+                    ${[...stars].map((s,i) => `<span class="star ${s==='★'?'filled':''}">${s}</span>`).join('')}
+                </div>` : ''}
+            </div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function toggleLog(el) {
+    el.classList.toggle('log-expanded');
+    const preview = el.querySelector('.log-preview');
+    if (el.classList.contains('log-expanded')) {
+        preview.style.webkitLineClamp = 'unset';
+        preview.style.display = 'block';
+    } else {
+        preview.style.webkitLineClamp = '2';
+        preview.style.display = '-webkit-box';
+    }
+}
+
+function showAiFeedback(fb) {
+    document.getElementById('ai-feedback-section').style.display = 'block';
+    document.getElementById('ai-grammar').textContent = fb.grammar_suggestions || '✓ No grammar issues found.';
+    const tags = (fb.skill_tags || []).map(t => `<span class="skill-tag">${escHtml(t)}</span>`).join('');
+    document.getElementById('ai-tags').innerHTML = tags || '<span class="text-muted text-sm">None detected</span>';
+    const score = fb.clarity_score || 0;
+    document.getElementById('ai-stars').innerHTML =
+        Array.from({length:5}, (_,i) =>
+            `<span class="star ${i<score?'filled':''}">${i<score?'★':'☆'}</span>`
+        ).join('') + `<span class="text-sm text-muted" style="margin-left:8px;">${score}/5</span>`;
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+<style>
+@media(max-width:900px){ #logs-grid{ grid-template-columns:1fr !important; } }
+.log-card .log-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.log-card.log-expanded .log-preview { display:block; }
+</style>
+{% endblock %}

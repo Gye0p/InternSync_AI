@@ -1,0 +1,186 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Dashboard — INTERNSYNC AI{% endblock %}
+{% block page_title %}My Dashboard{% endblock %}
+{% block page_subtitle %}{{ app_user.name }}'s OJT Overview{% endblock %}
+
+{% block header_actions %}
+    <a href="/student/logs" class="btn btn-primary btn-sm">
+        <span><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></span> Submit Log
+    </a>
+{% endblock %}
+
+{% block content %}
+{# Stats #}
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-icon"><i class="fa-solid fa-clock" aria-hidden="true"></i></span>
+        <div class="stat-value" id="stat-hours">—</div>
+        <div class="stat-label">Hours Completed</div>
+        <div class="stat-change" id="stat-hours-progress" style="color:var(--accent)">Loading…</div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span>
+        <div class="stat-value" id="stat-total-logs">—</div>
+        <div class="stat-label">Logs Submitted</div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span>
+        <div class="stat-value" id="stat-approved">—</div>
+        <div class="stat-label">Approved Logs</div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon"><i class="fa-solid fa-hourglass-half" aria-hidden="true"></i></span>
+        <div class="stat-value" id="stat-pending">—</div>
+        <div class="stat-label">Pending Review</div>
+    </div>
+</div>
+
+<div style="display:grid; grid-template-columns: 2fr 1fr; gap:24px; margin-bottom:32px;" class="dashboard-grid">
+
+    {# Assignment Info #}
+    <div class="card" id="assignment-card">
+        <div class="card-header">
+            <div>
+                <div class="card-title">My OJT Assignment</div>
+                <div class="card-subtitle">Current internship details</div>
+            </div>
+            <span class="badge badge-active" id="assignment-status">Active</span>
+        </div>
+        <div id="assignment-content">
+            <div class="empty-state">
+                <div class="spinner spinner-lg"></div>
+                <p style="margin-top:12px; color:var(--text-muted)">Loading…</p>
+            </div>
+        </div>
+    </div>
+
+    {# Recent Activity #}
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">Recent Logs</div>
+        </div>
+        <div id="recent-logs">
+            <div class="empty-state" style="padding:32px;">
+                <div class="spinner spinner-lg"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+{{ parent() }}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    const jwt = window.getJwt();
+    if (!jwt) { window.location.href = '/login'; return; }
+
+    try {
+        // Fetch dashboard data
+        const [dashRes, logsRes] = await Promise.all([
+            fetch('/api/assignments', { headers: { 'Authorization': 'Bearer ' + jwt } }),
+            fetch('/api/logs', { headers: { 'Authorization': 'Bearer ' + jwt } })
+        ]);
+
+        const assignmentsResponse = await dashRes.json();
+        const logsResponse = await logsRes.json();
+        const assignments = Array.isArray(assignmentsResponse) ? assignmentsResponse : (assignmentsResponse.assignments || []);
+        const logs = Array.isArray(logsResponse) ? logsResponse : (logsResponse.logs || []);
+
+        // Stats
+        const approved = logs.filter(l => l.status === 'APPROVED').length;
+        const pending  = logs.filter(l => l.status === 'PENDING').length;
+
+        document.getElementById('stat-total-logs').textContent = logs.length;
+        document.getElementById('stat-approved').textContent   = approved;
+        document.getElementById('stat-pending').textContent    = pending;
+
+        // Assignment
+        const assignment = Array.isArray(assignments) ? assignments[0] : null;
+        if (assignment) {
+            const pct = assignment.requiredHours > 0
+                ? Math.round((assignment.hoursCompleted / assignment.requiredHours) * 100)
+                : 0;
+            document.getElementById('stat-hours').textContent = assignment.hoursCompleted || 0;
+            document.getElementById('stat-hours-progress').textContent = pct + '% of ' + assignment.requiredHours + 'h target';
+            document.getElementById('assignment-status').textContent = assignment.status || 'Active';
+            document.getElementById('assignment-status').className = 'badge badge-' + (assignment.status || 'active').toLowerCase();
+
+            document.getElementById('assignment-content').innerHTML = `
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+                    <div>
+                        <div class="text-xs text-muted" style="margin-bottom:4px;">COMPANY</div>
+                        <div class="font-semibold">${escHtml(assignment.companyName || '—')}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted" style="margin-bottom:4px;">SUPERVISOR</div>
+                        <div class="font-semibold">${escHtml(assignment.supervisorName || '—')}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted" style="margin-bottom:4px;">START DATE</div>
+                        <div class="font-semibold">${assignment.startDate || '—'}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted" style="margin-bottom:4px;">REQUIRED HOURS</div>
+                        <div class="font-semibold">${assignment.requiredHours || '—'}h</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-muted">Progress</span>
+                        <span class="font-semibold">${pct}%</span>
+                    </div>
+                    <div class="progress-wrap">
+                        <div class="progress-bar" style="width:${Math.min(pct,100)}%"></div>
+                    </div>
+                    <div class="text-xs text-muted mt-1">${assignment.hoursCompleted}h of ${assignment.requiredHours}h completed</div>
+                </div>
+            `;
+        } else {
+            document.getElementById('stat-hours').textContent = '0';
+            document.getElementById('stat-hours-progress').textContent = 'No assignment yet';
+            document.getElementById('assignment-content').innerHTML = `
+                <div class="empty-state" style="padding:32px;">
+                    <div class="empty-state-icon"><i class="fa-solid fa-briefcase" aria-hidden="true"></i></div>
+                    <div class="empty-state-title">No Assignment Yet</div>
+                    <div class="empty-state-desc">Your coordinator hasn't assigned you to a company yet.</div>
+                </div>`;
+        }
+
+        // Recent logs
+        const recentLogs = logs.slice(0, 5);
+        if (recentLogs.length === 0) {
+            document.getElementById('recent-logs').innerHTML = `
+                <div class="empty-state" style="padding:32px;">
+                    <div class="empty-state-icon"><i class="fa-solid fa-file-lines" aria-hidden="true"></i></div>
+                    <div class="empty-state-title">No Logs Yet</div>
+                    <div class="empty-state-desc">Submit your first daily log to get started.</div>
+                </div>`;
+        } else {
+            document.getElementById('recent-logs').innerHTML = recentLogs.map(log => `
+                <div class="log-card" style="margin-bottom:10px; padding:14px;">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-semibold">${log.date || ''}</span>
+                        <span class="badge badge-${(log.status||'pending').toLowerCase()}">${log.status || 'PENDING'}</span>
+                    </div>
+                    <div class="text-sm text-muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        ${escHtml(log.content?.substring(0,80) || '')}…
+                    </div>
+                </div>
+            `).join('');
+        }
+
+    } catch(err) {
+        console.error(err);
+    }
+});
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+<style>
+@media(max-width:768px){ .dashboard-grid{ grid-template-columns:1fr !important; } }
+</style>
+{% endblock %}
