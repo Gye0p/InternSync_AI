@@ -93,9 +93,18 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
             throw new Error(data.message || data.error || 'Registration failed');
         }
 
-        successEl.textContent = 'Account created! Please check your email to verify before signing in.';
+        successEl.textContent = data.message || 'Account created! Please check your email to verify before signing in.';
+        if (data.verificationUrl) {
+            const link = document.createElement('a');
+            link.href = data.verificationUrl;
+            link.textContent = ' Open verification link';
+            link.style.marginLeft = '4px';
+            successEl.appendChild(link);
+        }
         successEl.style.display = 'flex';
-        setTimeout(() => window.location.href = '/login', 2500);
+        if (!data.verificationUrl) {
+            setTimeout(() => window.location.href = '/login', 2500);
+        }
 
     } catch (err) {
         errorEl.textContent = err.message || 'Registration failed. Please try again.';

@@ -44,6 +44,28 @@ class DailyLogRepository extends ServiceEntityRepository
             ->getResult();
     }
 
+    public function findByStudent($user): array
+    {
+        return $this->createQueryBuilder('l')
+            ->join('l.assignment', 'a')
+            ->andWhere('a.student = :student')
+            ->setParameter('student', $user)
+            ->orderBy('l.date', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function findBySupervisor($user): array
+    {
+        return $this->createQueryBuilder('l')
+            ->join('l.assignment', 'a')
+            ->andWhere('a.supervisor = :supervisor')
+            ->setParameter('supervisor', $user)
+            ->orderBy('l.date', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
     public function countByStatus(string $status): int
     {
         return (int) $this->createQueryBuilder('l')

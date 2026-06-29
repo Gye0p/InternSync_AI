@@ -5,13 +5,19 @@ namespace App\EventListener;
 use App\Entity\DailyLog;
 use App\Entity\OjtAssignment;
 use App\Service\CertificateGeneratorService;
+use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsEntityListener;
+use Doctrine\ORM\Event\PostFlushEventArgs;
 use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Doctrine\ORM\Events;
 
 #[AsEntityListener(event: Events::postUpdate, entity: DailyLog::class)]
+#[AsDoctrineListener(event: Events::postFlush)]
 class LogApprovalListener
 {
+    /** @var int[] Assignment IDs queued for certificate generation after flush */
+    private array $assignmentsPendingCertificate = [];
+
     public function __construct(
         private readonly CertificateGeneratorService $certificateGenerator,
     ) {
@@ -19,12 +25,10 @@ class LogApprovalListener
 
     public function postUpdate(DailyLog $dailyLog, PostUpdateEventArgs $event): void
     {
-        // Only trigger on status change to APPROVED
         if ($dailyLog->getStatus() !== DailyLog::STATUS_APPROVED) {
             return;
         }
 
-        // Check if the status field actually changed (avoid re-triggering)
         $em = $event->getObjectManager();
         $unitOfWork = $em->getUnitOfWork();
         $changeSet = $unitOfWork->getEntityChangeSet($dailyLog);
@@ -35,7 +39,7 @@ class LogApprovalListener
 
         $oldStatus = $changeSet['status'][0] ?? null;
         if ($oldStatus === DailyLog::STATUS_APPROVED) {
-            return; // Was already approved, no-op
+            return;
         }
 
         $assignment = $dailyLog->getAssignment();
@@ -43,25 +47,40 @@ class LogApprovalListener
             return;
         }
 
-        // Add hours worked to the assignment
         $newHoursCompleted = $assignment->getHoursCompleted() + $dailyLog->getHoursWorked();
         $assignment->setHoursCompleted($newHoursCompleted);
 
-        $em->persist($assignment);
-        $em->flush();
-
-        // Check if assignment is now complete
         if ($newHoursCompleted >= $assignment->getRequiredHours()) {
             $assignment->setStatus(OjtAssignment::STATUS_COMPLETED);
             $assignment->setEndDate(new \DateTime());
 
-            // Generate certificate if not already generated
             if ($assignment->getCertificate() === null) {
+                $this->assignmentsPendingCertificate[$assignment->getId()] = $assignment->getId();
+            }
+        }
+
+        $em->persist($assignment);
+        $unitOfWork->recomputeSingleEntityChangeSet(
+            $em->getClassMetadata(OjtAssignment::class),
+            $assignment
+        );
+    }
+
+    public function postFlush(PostFlushEventArgs $event): void
+    {
+        if ($this->assignmentsPendingCertificate === []) {
+            return;
+        }
+
+        $pendingIds = $this->assignmentsPendingCertificate;
+        $this->assignmentsPendingCertificate = [];
+
+        $em = $event->getObjectManager();
+        foreach ($pendingIds as $assignmentId) {
+            $assignment = $em->find(OjtAssignment::class, $assignmentId);
+            if ($assignment && $assignment->getCertificate() === null) {
                 $this->certificateGenerator->generate($assignment);
             }
-
-            $em->persist($assignment);
-            $em->flush();
         }
     }
 }

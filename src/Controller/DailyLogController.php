@@ -47,10 +47,17 @@ class DailyLogController extends AbstractController
         $assignmentId = $data['assignment_id'] ?? null;
         $content = trim($data['content'] ?? '');
         $dateStr = $data['date'] ?? null;
-        $hoursWorked = (float) ($data['hours_worked'] ?? 8);
-
         if (!$assignmentId || $content === '') {
             return $this->json(['error' => 'assignment_id and content are required.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (!isset($data['hours_worked'])) {
+            return $this->json(['error' => 'hours_worked is required.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $hoursWorked = (float) $data['hours_worked'];
+        if ($hoursWorked <= 0 || $hoursWorked > 24) {
+            return $this->json(['error' => 'hours_worked must be between 0 and 24.'], Response::HTTP_BAD_REQUEST);
         }
 
         $assignment = $this->assignmentRepository->find($assignmentId);

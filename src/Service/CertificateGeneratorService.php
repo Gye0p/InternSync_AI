@@ -31,15 +31,27 @@ class CertificateGeneratorService
      */
     public function generate(OjtAssignment $assignment): Certificate
     {
-        // Render HTML from Twig template
+        if ($assignment->getCertificate() !== null) {
+            return $assignment->getCertificate();
+        }
+
+        // Persist first so the certificate has an ID for the verification footer
+        $certificate = new Certificate();
+        $certificate->setAssignment($assignment);
+        $certificate->setGeneratedAt(new \DateTimeImmutable());
+        $certificate->setFilePath('pending');
+
+        $this->entityManager->persist($certificate);
+        $this->entityManager->flush();
+
         $html = $this->twig->render('certificate/certificate.html.twig', [
             'assignment' => $assignment,
             'student' => $assignment->getStudent(),
             'supervisor' => $assignment->getSupervisor(),
+            'certificate' => $certificate,
             'generatedAt' => new \DateTimeImmutable(),
         ]);
 
-        // Configure DomPDF
         $options = new Options();
         $options->set('isHtml5ParserEnabled', true);
         $options->set('isRemoteEnabled', false);
@@ -50,13 +62,11 @@ class CertificateGeneratorService
         $dompdf->setPaper('A4', 'landscape');
         $dompdf->render();
 
-        // Ensure output directory exists
         $outputDir = $this->projectDir . '/var/certificates';
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0775, true);
         }
 
-        // Generate unique filename
         $filename = sprintf(
             'certificate_%d_%s.pdf',
             $assignment->getId(),
@@ -64,16 +74,9 @@ class CertificateGeneratorService
         );
         $filePath = $outputDir . '/' . $filename;
 
-        // Write PDF to disk
         file_put_contents($filePath, $dompdf->output());
 
-        // Create Certificate entity
-        $certificate = new Certificate();
-        $certificate->setAssignment($assignment);
         $certificate->setFilePath('var/certificates/' . $filename);
-        $certificate->setGeneratedAt(new \DateTimeImmutable());
-
-        $this->entityManager->persist($certificate);
         $this->entityManager->flush();
 
         $this->emailCertificate($assignment, $filePath, $filename);

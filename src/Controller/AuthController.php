@@ -82,13 +82,18 @@ class AuthController extends AbstractController
         $this->entityManager->flush();
 
         $emailSent = $this->sendVerificationEmail($user);
-
-        return $this->json([
+        $response = [
             'message' => $emailSent
                 ? 'User registered successfully. Please verify your email before signing in.'
                 : 'User registered successfully, but the verification email could not be sent. Please contact the coordinator.',
             'user' => $user->toArray(),
-        ], Response::HTTP_CREATED);
+        ];
+
+        if ($this->getParameter('kernel.debug')) {
+            $response['verificationUrl'] = $this->createVerificationUrl($user);
+        }
+
+        return $this->json($response, Response::HTTP_CREATED);
     }
 
     #[Route('/api/verify-email', name: 'api_verify_email', methods: ['GET'])]
@@ -153,7 +158,12 @@ class AuthController extends AbstractController
             ], Response::HTTP_BAD_GATEWAY);
         }
 
-        return $this->json(['message' => 'Verification email sent. Please check your inbox or spam folder.']);
+        $response = ['message' => 'Verification email sent. Please check your inbox or spam folder.'];
+        if ($this->getParameter('kernel.debug')) {
+            $response['verificationUrl'] = $this->createVerificationUrl($user);
+        }
+
+        return $this->json($response);
     }
 
     /**
@@ -189,17 +199,18 @@ class AuthController extends AbstractController
             return false;
         }
 
-        $verificationUrl = $this->generateUrl(
-            'api_verify_email',
-            ['token' => $token],
-            UrlGeneratorInterface::ABSOLUTE_URL
-        );
+        $verificationUrl = $this->createVerificationUrl($user);
 
         $email = (new TemplatedEmail())
             ->from(new Address($this->mailerFrom, 'InternSync AI'))
             ->to(new Address($user->getEmail(), $user->getName() ?? $user->getEmail()))
-            ->subject('Verify your InternSync AI account')
+            ->subject('InternSync AI verification link')
             ->htmlTemplate('auth/verification_email.html.twig')
+            ->text(sprintf(
+                "Hello %s,\n\nWelcome to InternSync AI. Verify your email here:\n%s\n\nThis link expires in 24 hours.",
+                $user->getName() ?? $user->getEmail(),
+                $verificationUrl
+            ))
             ->context([
                 'user' => $user,
                 'verificationUrl' => $verificationUrl,
@@ -218,5 +229,14 @@ class AuthController extends AbstractController
 
             return false;
         }
+    }
+
+    private function createVerificationUrl(User $user): string
+    {
+        return $this->generateUrl(
+            'api_verify_email',
+            ['token' => $user->getEmailVerificationToken()],
+            UrlGeneratorInterface::ABSOLUTE_URL
+        );
     }
 }

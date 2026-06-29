@@ -139,6 +139,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             successEl.textContent = data.message || 'Verification email sent.';
+            if (data.verificationUrl) {
+                const link = document.createElement('a');
+                link.href = data.verificationUrl;
+                link.textContent = ' Open verification link';
+                link.style.marginLeft = '4px';
+                successEl.appendChild(link);
+            }
             successEl.style.display = 'flex';
         } catch (err) {
             errorEl.textContent = err.message || 'Could not resend verification email.';
