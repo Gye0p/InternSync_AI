@@ -5,6 +5,7 @@
 # See also https://symfony.com/doc/current/service_container/import.html
 
 parameters:
+    app.mailer_from: '%env(MAILER_FROM)%'
 
 services:
     # default configuration for services in *this* file
@@ -26,3 +27,4 @@ services:
     App\Service\CertificateGeneratorService:
         arguments:
             $projectDir: '%kernel.project_dir%'
+            $mailerFrom: '%app.mailer_from%'

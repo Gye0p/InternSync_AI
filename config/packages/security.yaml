@@ -38,9 +38,9 @@ security:
         - { path: ^/api/register, roles: PUBLIC_ACCESS }
 
         # Protected API routes
-        - { path: ^/api/dashboard, roles: IS_AUTHENTICATED_FULLY }
-        - { path: ^/api/assignments, roles: IS_AUTHENTICATED_FULLY }
-        - { path: ^/api/logs, roles: IS_AUTHENTICATED_FULLY }
+        - { path: ^/api/dashboard, roles: ROLE_COORDINATOR }
+        - { path: ^/api/assignments, roles: [ROLE_STUDENT, ROLE_SUPERVISOR, ROLE_COORDINATOR] }
+        - { path: ^/api/logs, roles: [ROLE_STUDENT, ROLE_SUPERVISOR, ROLE_COORDINATOR] }
         - { path: ^/api/me, roles: IS_AUTHENTICATED_FULLY }
 
         # Page routes are public (JWT checked in controller)

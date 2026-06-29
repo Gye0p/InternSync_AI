@@ -7,6 +7,11 @@ use App\Entity\OjtAssignment;
 use Doctrine\ORM\EntityManagerInterface;
 use Dompdf\Dompdf;
 use Dompdf\Options;
+use Psr\Log\LoggerInterface;
+use Symfony\Bridge\Twig\Mime\TemplatedEmail;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Address;
 use Twig\Environment;
 
 class CertificateGeneratorService
@@ -14,7 +19,10 @@ class CertificateGeneratorService
     public function __construct(
         private readonly Environment $twig,
         private readonly EntityManagerInterface $entityManager,
+        private readonly MailerInterface $mailer,
+        private readonly LoggerInterface $logger,
         private readonly string $projectDir,
+        private readonly string $mailerFrom,
     ) {
     }
 
@@ -68,6 +76,42 @@ class CertificateGeneratorService
         $this->entityManager->persist($certificate);
         $this->entityManager->flush();
 
+        $this->emailCertificate($assignment, $filePath, $filename);
+
         return $certificate;
+    }
+
+    private function emailCertificate(OjtAssignment $assignment, string $filePath, string $filename): void
+    {
+        $student = $assignment->getStudent();
+        if (!$student || !$student->getEmail()) {
+            $this->logger->warning('Certificate email skipped because the assignment has no student email.', [
+                'assignmentId' => $assignment->getId(),
+            ]);
+
+            return;
+        }
+
+        $email = (new TemplatedEmail())
+            ->from(new Address($this->mailerFrom, 'InternSync AI'))
+            ->to(new Address($student->getEmail(), $student->getName() ?? $student->getEmail()))
+            ->subject('Your OJT Completion Certificate')
+            ->htmlTemplate('certificate/email.html.twig')
+            ->context([
+                'assignment' => $assignment,
+                'student' => $student,
+                'supervisor' => $assignment->getSupervisor(),
+            ])
+            ->attachFromPath($filePath, $filename, 'application/pdf');
+
+        try {
+            $this->mailer->send($email);
+        } catch (TransportExceptionInterface $exception) {
+            $this->logger->error('Certificate was generated, but the email could not be sent.', [
+                'assignmentId' => $assignment->getId(),
+                'studentEmail' => $student->getEmail(),
+                'exception' => $exception->getMessage(),
+            ]);
+        }
     }
 }
