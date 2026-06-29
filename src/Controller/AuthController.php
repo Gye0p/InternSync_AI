@@ -121,6 +121,41 @@ class AuthController extends AbstractController
         return $this->json(['message' => 'Email verified successfully. You may now sign in.']);
     }
 
+    #[Route('/api/resend-verification', name: 'api_resend_verification', methods: ['POST'])]
+    public function resendVerification(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        if (!$data) {
+            return $this->json(['error' => 'Invalid JSON payload.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $email = trim((string) ($data['email'] ?? ''));
+        if ($email === '') {
+            return $this->json(['error' => 'Email is required.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
+        if (!$user) {
+            return $this->json(['error' => 'No account found for that email.'], Response::HTTP_NOT_FOUND);
+        }
+
+        if ($user->isEmailVerified()) {
+            return $this->json(['message' => 'This email is already verified. You may sign in.']);
+        }
+
+        $user->setEmailVerificationToken(bin2hex(random_bytes(32)));
+        $user->setEmailVerificationTokenExpiresAt(new \DateTimeImmutable('+24 hours'));
+        $this->entityManager->flush();
+
+        if (!$this->sendVerificationEmail($user)) {
+            return $this->json([
+                'error' => 'Verification email could not be sent. Please try again later.',
+            ], Response::HTTP_BAD_GATEWAY);
+        }
+
+        return $this->json(['message' => 'Verification email sent. Please check your inbox or spam folder.']);
+    }
+
     /**
      * Login is handled by LexikJWTAuthenticationBundle's json_login authenticator.
      * This route exists only so that the path is explicitly defined for documentation.

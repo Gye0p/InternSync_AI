@@ -19,6 +19,7 @@
         </div>
 
         <div id="error-msg" class="alert alert-danger" style="display:none"></div>
+        <div id="success-msg" class="alert alert-success" style="display:none"></div>
 
         <form id="login-form" class="auth-form" novalidate>
             <div class="form-group">
@@ -37,6 +38,9 @@
 
         <div class="auth-footer">
             Don't have an account? <a href="/register">Create one</a>
+            <br>
+            Didn't receive verification email?
+            <button type="button" id="resend-verification-btn" class="link-button">Resend</button>
         </div>
     </div>
 </div>
@@ -59,11 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-password').value;
         const errorEl = document.getElementById('error-msg');
+        const successEl = document.getElementById('success-msg');
         const btnText = document.getElementById('btn-text');
         const spinner = document.getElementById('btn-spinner');
         const btn = document.getElementById('login-btn');
 
         errorEl.style.display = 'none';
+        successEl.style.display = 'none';
         btn.disabled = true;
         btnText.textContent = 'Signing in…';
         spinner.style.display = 'inline-block';
@@ -97,6 +103,49 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.disabled = false;
             btnText.textContent = 'Sign In';
             spinner.style.display = 'none';
+        }
+    });
+
+    document.getElementById('resend-verification-btn').addEventListener('click', async () => {
+        const email = document.getElementById('login-email').value.trim();
+        const errorEl = document.getElementById('error-msg');
+        const successEl = document.getElementById('success-msg');
+        const resendBtn = document.getElementById('resend-verification-btn');
+
+        errorEl.style.display = 'none';
+        successEl.style.display = 'none';
+
+        if (!email) {
+            errorEl.textContent = 'Enter your email address first.';
+            errorEl.style.display = 'flex';
+            return;
+        }
+
+        resendBtn.disabled = true;
+        resendBtn.textContent = 'Sending...';
+
+        try {
+            const res = await fetch('/api/resend-verification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            const contentType = res.headers.get('content-type') || '';
+            const raw = await res.text();
+            const data = contentType.includes('application/json') ? JSON.parse(raw) : { error: raw };
+
+            if (!res.ok) {
+                throw new Error(data.message || data.error || 'Could not resend verification email.');
+            }
+
+            successEl.textContent = data.message || 'Verification email sent.';
+            successEl.style.display = 'flex';
+        } catch (err) {
+            errorEl.textContent = err.message || 'Could not resend verification email.';
+            errorEl.style.display = 'flex';
+        } finally {
+            resendBtn.disabled = false;
+            resendBtn.textContent = 'Resend';
         }
     });
 

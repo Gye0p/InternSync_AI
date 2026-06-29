@@ -1037,6 +1037,23 @@ select.form-control {
 .auth-footer a { color: var(--primary-light); font-weight: 600; }
 .auth-footer a:hover { color: var(--accent); }
 
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--primary-light);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+}
+
+.link-button:hover { color: var(--accent); }
+
+.link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 /* ============================================================
    Hamburger / Mobile
    ============================================================ */
