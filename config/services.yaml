@@ -6,6 +6,7 @@
 
 parameters:
     app.mailer_from: '%env(MAILER_FROM)%'
+    gemini_default_model: 'gemini-2.5-flash'
 
 services:
     # default configuration for services in *this* file
@@ -23,8 +24,13 @@ services:
     App\Service\AiLogReviewerService:
         arguments:
             $geminiApiKey: '%env(GEMINI_API_KEY)%'
+            $geminiModel: '%env(default:gemini_default_model:GEMINI_MODEL)%'
 
     App\Service\CertificateGeneratorService:
         arguments:
             $projectDir: '%kernel.project_dir%'
+            $mailerFrom: '%app.mailer_from%'
+
+    App\Controller\AuthController:
+        arguments:
             $mailerFrom: '%app.mailer_from%'

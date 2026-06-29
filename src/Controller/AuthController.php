@@ -4,12 +4,18 @@ namespace App\Controller;
 
 use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Bridge\Twig\Mime\TemplatedEmail;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
+use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Mime\Address;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 class AuthController extends AbstractController
@@ -18,6 +24,9 @@ class AuthController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly ValidatorInterface $validator,
+        private readonly MailerInterface $mailer,
+        private readonly LoggerInterface $logger,
+        private readonly string $mailerFrom,
     ) {
     }
 
@@ -40,10 +49,9 @@ class AuthController extends AbstractController
             return $this->json(['error' => 'Name, email and password are required.'], Response::HTTP_BAD_REQUEST);
         }
 
-        // Validate role
-        $validRoles = [User::ROLE_STUDENT, User::ROLE_SUPERVISOR, User::ROLE_COORDINATOR];
-        if (!in_array($role, $validRoles, true)) {
-            return $this->json(['error' => 'Invalid role. Must be STUDENT, SUPERVISOR, or COORDINATOR.'], Response::HTTP_BAD_REQUEST);
+        // Public registration is student-only. Staff accounts must be provisioned by an admin/fixture.
+        if ($role !== User::ROLE_STUDENT) {
+            return $this->json(['error' => 'Only student self-registration is allowed.'], Response::HTTP_FORBIDDEN);
         }
 
         // Check for existing user
@@ -55,8 +63,10 @@ class AuthController extends AbstractController
         $user = new User();
         $user->setName($name);
         $user->setEmail($email);
-        $user->setRole($role);
+        $user->setRole(User::ROLE_STUDENT);
         $user->setPassword($this->passwordHasher->hashPassword($user, $password));
+        $user->setEmailVerificationToken(bin2hex(random_bytes(32)));
+        $user->setEmailVerificationTokenExpiresAt(new \DateTimeImmutable('+24 hours'));
 
         // Validate entity constraints
         $errors = $this->validator->validate($user);
@@ -71,10 +81,44 @@ class AuthController extends AbstractController
         $this->entityManager->persist($user);
         $this->entityManager->flush();
 
+        $emailSent = $this->sendVerificationEmail($user);
+
         return $this->json([
-            'message' => 'User registered successfully.',
+            'message' => $emailSent
+                ? 'User registered successfully. Please verify your email before signing in.'
+                : 'User registered successfully, but the verification email could not be sent. Please contact the coordinator.',
             'user' => $user->toArray(),
         ], Response::HTTP_CREATED);
+    }
+
+    #[Route('/api/verify-email', name: 'api_verify_email', methods: ['GET'])]
+    public function verifyEmail(Request $request): JsonResponse
+    {
+        $token = trim((string) $request->query->get('token', ''));
+        if ($token === '') {
+            return $this->json(['error' => 'Verification token is required.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user = $this->entityManager->getRepository(User::class)->findOneBy([
+            'emailVerificationToken' => $token,
+        ]);
+
+        if (!$user) {
+            return $this->json(['error' => 'Invalid verification token.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $expiresAt = $user->getEmailVerificationTokenExpiresAt();
+        if ($expiresAt !== null && $expiresAt < new \DateTimeImmutable()) {
+            return $this->json(['error' => 'Verification token has expired.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $user->setEmailVerifiedAt(new \DateTimeImmutable());
+        $user->setEmailVerificationToken(null);
+        $user->setEmailVerificationTokenExpiresAt(null);
+
+        $this->entityManager->flush();
+
+        return $this->json(['message' => 'Email verified successfully. You may now sign in.']);
     }
 
     /**
@@ -101,5 +145,43 @@ class AuthController extends AbstractController
         }
 
         return $this->json(['user' => $user->toArray()]);
+    }
+
+    private function sendVerificationEmail(User $user): bool
+    {
+        $token = $user->getEmailVerificationToken();
+        if (!$token) {
+            return false;
+        }
+
+        $verificationUrl = $this->generateUrl(
+            'api_verify_email',
+            ['token' => $token],
+            UrlGeneratorInterface::ABSOLUTE_URL
+        );
+
+        $email = (new TemplatedEmail())
+            ->from(new Address($this->mailerFrom, 'InternSync AI'))
+            ->to(new Address($user->getEmail(), $user->getName() ?? $user->getEmail()))
+            ->subject('Verify your InternSync AI account')
+            ->htmlTemplate('auth/verification_email.html.twig')
+            ->context([
+                'user' => $user,
+                'verificationUrl' => $verificationUrl,
+            ]);
+
+        try {
+            $this->mailer->send($email);
+
+            return true;
+        } catch (TransportExceptionInterface $exception) {
+            $this->logger->error('Registration verification email could not be sent.', [
+                'userId' => $user->getId(),
+                'email' => $user->getEmail(),
+                'exception' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 }

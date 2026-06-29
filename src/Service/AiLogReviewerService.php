@@ -6,13 +6,13 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class AiLogReviewerService
 {
-    private const GEMINI_MODEL = 'gemini-2.0-flash';
     private const SYSTEM_PROMPT = 'You are an OJT log reviewer. Given a student\'s daily log entry, return ONLY valid JSON: {"grammar_suggestions": "string or empty", "skill_tags": ["array", "of", "tags"], "clarity_score": 1-5}';
     private const TIMEOUT = 5;
 
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         private readonly string $geminiApiKey,
+        private readonly string $geminiModel,
     ) {
     }
 
@@ -29,7 +29,7 @@ class AiLogReviewerService
         try {
             $url = sprintf(
                 'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
-                self::GEMINI_MODEL,
+                $this->geminiModel,
                 $this->geminiApiKey
             );
 
