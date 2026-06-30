@@ -39,6 +39,10 @@ class DailyLogController extends AbstractController
             return $this->json(['error' => 'Not authenticated.'], Response::HTTP_UNAUTHORIZED);
         }
 
+        if ($user->getRole() !== User::ROLE_STUDENT) {
+            return $this->json(['error' => 'Only students can submit daily logs.'], Response::HTTP_FORBIDDEN);
+        }
+
         $data = json_decode($request->getContent(), true);
         if (!$data) {
             return $this->json(['error' => 'Invalid JSON payload.'], Response::HTTP_BAD_REQUEST);

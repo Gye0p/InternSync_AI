@@ -46,4 +46,14 @@ class OjtAssignmentRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleScalarResult();
     }
+
+    public function getAverageCompletionPercentage(): float
+    {
+        $result = $this->createQueryBuilder('a')
+            ->select('AVG(CASE WHEN a.requiredHours > 0 THEN (a.hoursCompleted / a.requiredHours) * 100 ELSE 0 END)')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        return round((float) ($result ?? 0), 2);
+    }
 }

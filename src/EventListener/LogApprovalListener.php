@@ -51,8 +51,10 @@ class LogApprovalListener
         $assignment->setHoursCompleted($newHoursCompleted);
 
         if ($newHoursCompleted >= $assignment->getRequiredHours()) {
-            $assignment->setStatus(OjtAssignment::STATUS_COMPLETED);
-            $assignment->setEndDate(new \DateTime());
+            if ($assignment->getStatus() !== OjtAssignment::STATUS_COMPLETED) {
+                $assignment->setStatus(OjtAssignment::STATUS_COMPLETED);
+                $assignment->setEndDate(new \DateTime());
+            }
 
             if ($assignment->getCertificate() === null) {
                 $this->assignmentsPendingCertificate[$assignment->getId()] = $assignment->getId();

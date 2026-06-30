@@ -31,53 +31,70 @@ class CertificateGeneratorService
      */
     public function generate(OjtAssignment $assignment): Certificate
     {
-        if ($assignment->getCertificate() !== null) {
-            return $assignment->getCertificate();
+        $existing = $assignment->getCertificate();
+        if ($existing !== null && $existing->getFilePath() !== 'pending') {
+            return $existing;
         }
 
-        // Persist first so the certificate has an ID for the verification footer
-        $certificate = new Certificate();
-        $certificate->setAssignment($assignment);
-        $certificate->setGeneratedAt(new \DateTimeImmutable());
-        $certificate->setFilePath('pending');
+        $certificate = $existing ?? new Certificate();
+        $isNew = $existing === null;
 
-        $this->entityManager->persist($certificate);
-        $this->entityManager->flush();
-
-        $html = $this->twig->render('certificate/certificate.html.twig', [
-            'assignment' => $assignment,
-            'student' => $assignment->getStudent(),
-            'supervisor' => $assignment->getSupervisor(),
-            'certificate' => $certificate,
-            'generatedAt' => new \DateTimeImmutable(),
-        ]);
-
-        $options = new Options();
-        $options->set('isHtml5ParserEnabled', true);
-        $options->set('isRemoteEnabled', false);
-        $options->set('defaultFont', 'Helvetica');
-
-        $dompdf = new Dompdf($options);
-        $dompdf->loadHtml($html);
-        $dompdf->setPaper('A4', 'landscape');
-        $dompdf->render();
-
-        $outputDir = $this->projectDir . '/var/certificates';
-        if (!is_dir($outputDir)) {
-            mkdir($outputDir, 0775, true);
+        if ($isNew) {
+            $certificate->setAssignment($assignment);
+            $certificate->setGeneratedAt(new \DateTimeImmutable());
+            $certificate->setFilePath('pending');
+            $this->entityManager->persist($certificate);
+            $this->entityManager->flush();
         }
 
-        $filename = sprintf(
-            'certificate_%d_%s.pdf',
-            $assignment->getId(),
-            (new \DateTimeImmutable())->format('Ymd_His')
-        );
-        $filePath = $outputDir . '/' . $filename;
+        try {
+            $html = $this->twig->render('certificate/certificate.html.twig', [
+                'assignment' => $assignment,
+                'student' => $assignment->getStudent(),
+                'supervisor' => $assignment->getSupervisor(),
+                'certificate' => $certificate,
+                'generatedAt' => new \DateTimeImmutable(),
+            ]);
 
-        file_put_contents($filePath, $dompdf->output());
+            $options = new Options();
+            $options->set('isHtml5ParserEnabled', true);
+            $options->set('isRemoteEnabled', false);
+            $options->set('defaultFont', 'Helvetica');
 
-        $certificate->setFilePath('var/certificates/' . $filename);
-        $this->entityManager->flush();
+            $dompdf = new Dompdf($options);
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'landscape');
+            $dompdf->render();
+
+            $outputDir = $this->projectDir . '/var/certificates';
+            if (!is_dir($outputDir)) {
+                mkdir($outputDir, 0775, true);
+            }
+
+            $filename = sprintf(
+                'certificate_%d_%s.pdf',
+                $assignment->getId(),
+                (new \DateTimeImmutable())->format('Ymd_His')
+            );
+            $filePath = $outputDir . '/' . $filename;
+
+            file_put_contents($filePath, $dompdf->output());
+
+            $certificate->setFilePath('var/certificates/' . $filename);
+            $this->entityManager->flush();
+        } catch (\Throwable $exception) {
+            $this->logger->error('Certificate PDF generation failed.', [
+                'assignmentId' => $assignment->getId(),
+                'exception' => $exception->getMessage(),
+            ]);
+
+            if ($isNew && $certificate->getId() !== null) {
+                $this->entityManager->remove($certificate);
+                $this->entityManager->flush();
+            }
+
+            throw $exception;
+        }
 
         $this->emailCertificate($assignment, $filePath, $filename);
 

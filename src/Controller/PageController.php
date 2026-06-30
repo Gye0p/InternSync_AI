@@ -3,7 +3,6 @@
 namespace App\Controller;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\Cookie;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -47,9 +46,9 @@ class PageController extends AbstractController
     #[Route('/student/dashboard', name: 'app_student_dashboard', methods: ['GET'])]
     public function studentDashboard(Request $request): Response
     {
-        $userData = $this->getUserDataFromCookie($request);
-        if (!$userData) {
-            return $this->redirectToRoute('app_login');
+        $userData = $this->requireRole($request, 'STUDENT');
+        if ($userData instanceof RedirectResponse) {
+            return $userData;
         }
 
         return $this->render('student/dashboard.html.twig', [
@@ -60,9 +59,9 @@ class PageController extends AbstractController
     #[Route('/student/logs', name: 'app_student_logs', methods: ['GET'])]
     public function studentLogs(Request $request): Response
     {
-        $userData = $this->getUserDataFromCookie($request);
-        if (!$userData) {
-            return $this->redirectToRoute('app_login');
+        $userData = $this->requireRole($request, 'STUDENT');
+        if ($userData instanceof RedirectResponse) {
+            return $userData;
         }
 
         return $this->render('student/logs.html.twig', [
@@ -73,9 +72,9 @@ class PageController extends AbstractController
     #[Route('/supervisor/dashboard', name: 'app_supervisor_dashboard', methods: ['GET'])]
     public function supervisorDashboard(Request $request): Response
     {
-        $userData = $this->getUserDataFromCookie($request);
-        if (!$userData) {
-            return $this->redirectToRoute('app_login');
+        $userData = $this->requireRole($request, 'SUPERVISOR');
+        if ($userData instanceof RedirectResponse) {
+            return $userData;
         }
 
         return $this->render('supervisor/dashboard.html.twig', [
@@ -86,9 +85,9 @@ class PageController extends AbstractController
     #[Route('/supervisor/approvals', name: 'app_supervisor_approvals', methods: ['GET'])]
     public function supervisorApprovals(Request $request): Response
     {
-        $userData = $this->getUserDataFromCookie($request);
-        if (!$userData) {
-            return $this->redirectToRoute('app_login');
+        $userData = $this->requireRole($request, 'SUPERVISOR');
+        if ($userData instanceof RedirectResponse) {
+            return $userData;
         }
 
         return $this->render('supervisor/approvals.html.twig', [
@@ -99,14 +98,31 @@ class PageController extends AbstractController
     #[Route('/coordinator/dashboard', name: 'app_coordinator_dashboard', methods: ['GET'])]
     public function coordinatorDashboard(Request $request): Response
     {
-        $userData = $this->getUserDataFromCookie($request);
-        if (!$userData) {
-            return $this->redirectToRoute('app_login');
+        $userData = $this->requireRole($request, 'COORDINATOR');
+        if ($userData instanceof RedirectResponse) {
+            return $userData;
         }
 
         return $this->render('coordinator/dashboard.html.twig', [
             'app_user' => $userData,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>|RedirectResponse
+     */
+    private function requireRole(Request $request, string $role): array|RedirectResponse
+    {
+        $userData = $this->getUserDataFromCookie($request);
+        if (!$userData) {
+            return $this->redirectToRoute('app_login');
+        }
+
+        if (($userData['role'] ?? '') !== $role) {
+            return $this->redirectToDashboard($userData['role'] ?? '');
+        }
+
+        return $userData;
     }
 
     /**

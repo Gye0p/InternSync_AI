@@ -36,6 +36,10 @@ class DashboardApiController extends AbstractController
             return $this->json(['error' => 'Not authenticated.'], Response::HTTP_UNAUTHORIZED);
         }
 
+        if ($user->getRole() !== User::ROLE_COORDINATOR) {
+            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+        }
+
         $totalStudents = count($this->userRepository->findByRole(User::ROLE_STUDENT));
         $activeAssignments = $this->assignmentRepository->countByStatus(OjtAssignment::STATUS_ACTIVE);
         $completedAssignments = $this->assignmentRepository->countByStatus(OjtAssignment::STATUS_COMPLETED);
@@ -44,16 +48,7 @@ class DashboardApiController extends AbstractController
         $rejectedLogs = $this->dailyLogRepository->countByStatus('REJECTED');
         $averageClarity = $this->dailyLogRepository->getAverageClarityScore();
         $skillTagFrequency = $this->dailyLogRepository->getAllSkillTags();
-
-        // Compute overall completion percentages
-        $allAssignments = $this->assignmentRepository->findAll();
-        $completionPercentages = [];
-        foreach ($allAssignments as $assignment) {
-            $completionPercentages[] = $assignment->getCompletionPercentage();
-        }
-        $averageCompletion = count($completionPercentages) > 0
-            ? round(array_sum($completionPercentages) / count($completionPercentages), 2)
-            : 0;
+        $averageCompletion = $this->assignmentRepository->getAverageCompletionPercentage();
 
         return $this->json([
             'totalStudents' => $totalStudents,
@@ -63,9 +58,7 @@ class DashboardApiController extends AbstractController
             'approvedLogs' => $approvedLogs,
             'rejectedLogs' => $rejectedLogs,
             'averageCompletionPercentage' => $averageCompletion,
-            'avgCompletionRate' => $averageCompletion,
             'averageClarityScore' => $averageClarity,
-            'avgClarityScore' => $averageClarity,
             'skillTagFrequency' => $skillTagFrequency,
         ]);
     }
