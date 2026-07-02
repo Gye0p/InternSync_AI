@@ -71,28 +71,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!jwt) { window.location.href = '/login'; return; }
 
     try {
-        const [dashRes, assignRes] = await Promise.all([
-            fetch('/api/dashboard', { headers: { 'Authorization': 'Bearer ' + jwt } }),
-            fetch('/api/assignments', { headers: { 'Authorization': 'Bearer ' + jwt } })
-        ]);
-        const dash = await dashRes.json();
-        const assignmentsResponse = await assignRes.json();
-        const assigns = Array.isArray(assignmentsResponse) ? assignmentsResponse : (assignmentsResponse.assignments || []);
+        const response = await fetch('/api/dashboard', {
+            headers: { 'Authorization': 'Bearer ' + jwt }
+        });
+        const data = await response.json();
+        const stats = data.stats || {};
+        const assigns = data.assignments || [];
 
         // Stats
-        document.getElementById('s-students').textContent   = dash.totalStudents || 0;
-        document.getElementById('s-assignments').textContent= dash.activeAssignments || 0;
-        document.getElementById('s-completion').textContent = Number(dash.averageCompletionPercentage ?? dash.avgCompletionRate ?? 0).toFixed(0) + '%';
-        document.getElementById('s-clarity').textContent    = Number(dash.averageClarityScore ?? dash.avgClarityScore ?? 0).toFixed(1);
+        document.getElementById('s-students').textContent   = stats.totalStudents || 0;
+        document.getElementById('s-assignments').textContent= stats.activeAssignments || 0;
+        document.getElementById('s-completion').textContent = Number(stats.averageCompletionPercentage ?? 0).toFixed(0) + '%';
+        document.getElementById('s-clarity').textContent    = Number(stats.averageClarityScore ?? 0).toFixed(1);
 
         // Skill tags chart
-        const skillData = dash.skillTagFrequency || {};
+        const skillData = stats.skillTagFrequency || {};
         const skillLabels = Object.keys(skillData).slice(0,10);
         const skillValues = skillLabels.map(k => skillData[k]);
         renderSkillChart(skillLabels, skillValues);
 
         // Status chart
-        renderStatusChart(dash.pendingLogs || 0, dash.approvedLogs || 0, dash.rejectedLogs || 0);
+        renderStatusChart(stats.pendingLogs || 0, stats.approvedLogs || 0, stats.rejectedLogs || 0);
 
         // Student progress
         renderStudentProgress(assigns);
@@ -109,7 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
     } catch(e) {
-        console.error(e);
+        console.error('Dashboard failed to load:', e);
     }
 });
 
