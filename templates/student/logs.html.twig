@@ -135,7 +135,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'Authorization': 'Bearer ' + jwt,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ date, content, hoursWorked: hours })
+                body: JSON.stringify({
+                    assignment_id: {{ active_assignment.id|default('null') }},
+                    date,
+                    content,
+                    hours_worked: hours
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Submission failed');

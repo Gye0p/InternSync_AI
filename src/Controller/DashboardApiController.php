@@ -88,7 +88,7 @@ class DashboardApiController extends AbstractController
             'date' => $log->getDate()?->format('Y-m-d'),
             'status' => $log->getStatus(),
             'studentId' => $log->getAssignment()?->getStudent()?->getId(),
-            'studentName' => $log->getAssignment()?->getStudent()?->getEmail(),
+            'studentName' => $log->getAssignment()?->getStudent()?->getName(),
             'description' => $log->getContent(),
             'clarityScore' => $log->getClarityScore(),
             'tasksPerformed' => $log->getContent(), // Using content as tasks
