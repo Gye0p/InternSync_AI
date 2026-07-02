@@ -92,6 +92,7 @@
 {{ parent() }}
 <script>
 let allLogs = [];
+let activeAssignmentId = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     const jwt = window.getJwt();
@@ -99,6 +100,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Set today's date
     document.getElementById('log-date').value = new Date().toISOString().split('T')[0];
+
+    // Load the student's current assignment before enabling submission
+    await loadActiveAssignment(jwt);
 
     // Load logs
     await loadLogs(jwt);
@@ -118,6 +122,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         errEl.style.display = 'none';
         sucEl.style.display = 'none';
 
+        if (!activeAssignmentId) {
+            errEl.textContent = 'No active assignment found for your account.';
+            errEl.style.display = 'flex';
+            return;
+        }
+
         if (!content || content.length < 10) {
             errEl.textContent = 'Please write at least 10 characters describing your activities.';
             errEl.style.display = 'flex';
@@ -136,7 +146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    assignment_id: {{ active_assignment.id|default('null') }},
+                    assignment_id: activeAssignmentId,
                     date,
                     content,
                     hours_worked: hours
@@ -169,6 +179,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('log-search').addEventListener('input', filterLogs);
     document.getElementById('log-filter').addEventListener('change', filterLogs);
 });
+
+async function loadActiveAssignment(jwt) {
+    try {
+        const res = await fetch('/api/assignments', {
+            headers: { 'Authorization': 'Bearer ' + jwt }
+        });
+        const data = await res.json();
+        const assignments = Array.isArray(data) ? data : (data.assignments || []);
+        const activeAssignment = assignments.find(assignment => assignment.status !== 'COMPLETED');
+        activeAssignmentId = activeAssignment ? activeAssignment.id : null;
+
+        if (!activeAssignmentId) {
+            const submitBtn = document.getElementById('log-submit-btn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+            }
+            const errorEl = document.getElementById('form-error');
+            if (errorEl) {
+                errorEl.textContent = 'No active assignment found for your account.';
+                errorEl.style.display = 'flex';
+            }
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
 
 async function loadLogs(jwt) {
     try {
