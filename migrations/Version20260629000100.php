@@ -16,11 +16,11 @@ final class Version20260629000100 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
-        $this->addSql('ALTER TABLE `user` ADD email_verified_at DATETIME DEFAULT NULL COMMENT \'(DC2Type:datetime_immutable)\', ADD email_verification_token VARCHAR(64) DEFAULT NULL, ADD email_verification_token_expires_at DATETIME DEFAULT NULL COMMENT \'(DC2Type:datetime_immutable)\'');
+        $this->addSql('ALTER TABLE `user` ADD COLUMN IF NOT EXISTS email_verified_at DATETIME DEFAULT NULL COMMENT \'(DC2Type:datetime_immutable)\', ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR(64) DEFAULT NULL, ADD COLUMN IF NOT EXISTS email_verification_token_expires_at DATETIME DEFAULT NULL COMMENT \'(DC2Type:datetime_immutable)\'');
     }
 
     public function down(Schema $schema): void
     {
-        $this->addSql('ALTER TABLE `user` DROP email_verified_at, DROP email_verification_token, DROP email_verification_token_expires_at');
+        $this->addSql('ALTER TABLE `user` DROP COLUMN IF EXISTS email_verified_at, DROP COLUMN IF EXISTS email_verification_token, DROP COLUMN IF EXISTS email_verification_token_expires_at');
     }
 }

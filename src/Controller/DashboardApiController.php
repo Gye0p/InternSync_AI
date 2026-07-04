@@ -64,31 +64,6 @@ class DashboardApiController extends AbstractController
     }
 
     /**
-     * GET /api/logs — List daily logs filtered by user role.
-     */
-    #[Route('/api/logs', name: 'api_logs_list', methods: ['GET'])]
-    public function listLogs(): JsonResponse
-    {
-        /** @var User $user */
-        $user = $this->getUser();
-        if (!$user) {
-            return $this->json(['error' => 'Not authenticated.'], Response::HTTP_UNAUTHORIZED);
-        }
-
-        $logs = match ($user->getRole()) {
-            User::ROLE_STUDENT => $this->dailyLogRepository->findByStudent($user),
-            User::ROLE_SUPERVISOR => $this->dailyLogRepository->findBySupervisor($user),
-            User::ROLE_COORDINATOR => $this->dailyLogRepository->findAll(),
-            default => [],
-        };
-
-        $logArray = array_map(fn($log) => $log->toArray(), $logs);
-
-        return $this->json($logArray);
-    }
-
-
-    /**
      * GET /api/assignments — List assignments filtered by user role.
      */
     #[Route('/api/assignments', name: 'api_assignments_list', methods: ['GET'])]
