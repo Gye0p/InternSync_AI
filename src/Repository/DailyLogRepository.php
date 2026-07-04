@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\DailyLog;
 use App\Entity\OjtAssignment;
+use App\Entity\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -44,7 +45,7 @@ class DailyLogRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    public function findByStudent($user): array
+    public function findByStudent(User $user): array
     {
         return $this->createQueryBuilder('l')
             ->join('l.assignment', 'a')
@@ -55,7 +56,7 @@ class DailyLogRepository extends ServiceEntityRepository
             ->getResult();
     }
 
-    public function findBySupervisor($user): array
+    public function findBySupervisor(User $user): array
     {
         return $this->createQueryBuilder('l')
             ->join('l.assignment', 'a')
