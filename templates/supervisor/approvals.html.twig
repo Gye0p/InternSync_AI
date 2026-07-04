@@ -89,7 +89,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadLogs(jwt) {
     try {
         const res = await fetch('/api/logs', { headers: { 'Authorization': 'Bearer ' + (jwt || window.getJwt()) } });
-        allLogs = await res.json();
+        const data = await res.json();
+        allLogs = Array.isArray(data) ? data : (data.logs || []);
 
         // Stats
         document.getElementById('stat-pending').textContent  = allLogs.filter(l=>l.status==='PENDING').length;

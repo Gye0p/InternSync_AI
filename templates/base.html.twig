@@ -121,7 +121,11 @@ function logout() {
     window.location.href = '/login';
 }
 function getJwt() {
-    return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('jwt_token='))?.split('=')[1] || '';
+    const match = document.cookie
+        .split(';')
+        .map(c => c.trim())
+        .find(c => c.startsWith('jwt_token='));
+    return match ? match.substring('jwt_token='.length) : '';
 }
 window.getJwt = getJwt;
 </script>

@@ -82,20 +82,7 @@ class DashboardApiController extends AbstractController
             default => [],
         };
 
-        // Convert logs to array format for JSON response
-        $logArray = array_map(fn($log) => [
-            'id' => $log->getId(),
-            'date' => $log->getDate()?->format('Y-m-d'),
-            'status' => $log->getStatus(),
-            'studentId' => $log->getAssignment()?->getStudent()?->getId(),
-            'studentName' => $log->getAssignment()?->getStudent()?->getName(),
-            'description' => $log->getContent(),
-            'clarityScore' => $log->getClarityScore(),
-            'tasksPerformed' => $log->getContent(), // Using content as tasks
-            'skillsTrained' => $log->getSkillTags(),
-            'supervisorComment' => $log->getSupervisorComment(),
-            'hoursWorked' => $log->getHoursWorked(),
-        ], $logs);
+        $logArray = array_map(fn($log) => $log->toArray(), $logs);
 
         return $this->json($logArray);
     }

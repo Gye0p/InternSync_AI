@@ -177,6 +177,8 @@ class DailyLog
         return [
             'id' => $this->id,
             'assignmentId' => $this->assignment?->getId(),
+            'studentId' => $this->assignment?->getStudent()?->getId(),
+            'studentName' => $this->assignment?->getStudent()?->getName(),
             'date' => $this->date?->format('Y-m-d'),
             'content' => $this->content,
             'aiFeedback' => $this->aiFeedback,
